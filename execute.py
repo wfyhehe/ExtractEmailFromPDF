@@ -44,21 +44,21 @@ for docx in docx_list:
     try:
         emails.extend(extract_email_from_docx(docx))
     except:
-        logging.error('processing "%s" failed, for unknown reason' % pdf)
+        logging.error('processing "%s" failed, for unknown reason' % docx)
     try:
         phones.extend(extract_cellphone_from_docx(docx))
     except:
-        logging.error('processing "%s" failed, for unknown reason' % pdf)
+        logging.error('processing "%s" failed, for unknown reason' % docx)
         
 for txt in txt_list:
     try:
         emails.extend(extract_email_from_txt(txt))
     except:
-        logging.error('processing "%s" failed, for unknown reason' % pdf)
+        logging.error('processing "%s" failed, for unknown reason' % txt)
     try:
         phones.extend(extract_cellphone_from_txt(txt))
     except:
-        logging.error('processing "%s" failed, for unknown reason' % pdf)
+        logging.error('processing "%s" failed, for unknown reason' % txt)
     
 
 email_csv = ','.join(set(emails))
