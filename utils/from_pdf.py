@@ -21,10 +21,7 @@ def extract_email_from_pdf(pdf):
     """
     block_text = ''
     fp = open(pdf, 'rb')
-    try:
-        parser = PDFParser(fp)
-    except:
-        return ''
+    parser = PDFParser(fp)
     document = PDFDocument(parser)
     if not document.is_extractable:
         raise PDFTextExtractionNotAllowed
