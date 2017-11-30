@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from utils.from_docx import extract_cellphone_from_docx, extract_email_from_docx
 from utils.from_pdf import extract_cellphone_from_pdf, extract_email_from_pdf
+from utils.from_txt import extract_cellphone_from_txt, extract_email_from_txt
 
 now_str = datetime.now().strftime('%Y%m%d%H%M%S')
 OUTPUT_CSV = 'output_csv'
@@ -19,9 +20,11 @@ phones = []
 def process_directory(args, dir_name, file_names):
     for file_name in file_names:
         if file_name.endswith(u'.pdf'):
-            pdf_list.append(file_name)
+            pdf_list.append(u'{dir}/{file}'.format(dir=dir_name, file=file_name))
         elif file_name.endswith(u'.docx') or file_name.endswith(u'.zip'):
-            docx_list.append(file_name)
+            docx_list.append(u'{dir}/{file}'.format(dir=dir_name, file=file_name))
+        elif file_name.endswith(u'.txt'):
+            txt_list.append(u'{dir}/{file}'.format(dir=dir_name, file=file_name))
         elif file_name.endswith(u'.doc'):
             logging.error('can\'t process "%s", please convert to .docx or .pdf or .txt' % file_name)
 
@@ -29,11 +32,34 @@ def process_directory(args, dir_name, file_names):
 os.path.walk(u'.', process_directory, None)
 
 for pdf in pdf_list:
-    emails.extend(extract_email_from_pdf(pdf))
-    phones.extend(extract_cellphone_from_pdf(pdf))
+    try:
+        emails.extend(extract_email_from_pdf(pdf))
+    except:
+        pass
+    try:
+        phones.extend(extract_cellphone_from_pdf(pdf))
+    except:
+        pass
 for docx in docx_list:
-    emails.extend(extract_email_from_docx(docx))
-    phones.extend(extract_cellphone_from_docx(docx))
+    try:
+        emails.extend(extract_email_from_docx(docx))
+    except:
+        pass
+    try:
+        phones.extend(extract_cellphone_from_docx(docx))
+    except:
+        pass
+        
+for txt in txt_list:
+    try:
+        emails.extend(extract_email_from_txt(txt))
+    except:
+        pass
+    try:
+        phones.extend(extract_cellphone_from_txt(txt))
+    except:
+        pass
+    
 
 email_csv = ','.join(set(emails))
 phone_csv = ','.join(set(phones))
