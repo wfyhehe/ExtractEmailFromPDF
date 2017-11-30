@@ -6,4 +6,3 @@
 for .doc(really a hot potato!), please *google* methods to convert .doc to .docx|.pdf|.txt on your *os*  
 
 Please convert them before run this py.
-

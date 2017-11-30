@@ -35,30 +35,30 @@ for pdf in pdf_list:
     try:
         emails.extend(extract_email_from_pdf(pdf))
     except:
-        pass
+        logging.error('processing "%s" failed, for unknown reason' % pdf)
     try:
         phones.extend(extract_cellphone_from_pdf(pdf))
     except:
-        pass
+        logging.error('processing "%s" failed, for unknown reason' % pdf)
 for docx in docx_list:
     try:
         emails.extend(extract_email_from_docx(docx))
     except:
-        pass
+        logging.error('processing "%s" failed, for unknown reason' % pdf)
     try:
         phones.extend(extract_cellphone_from_docx(docx))
     except:
-        pass
+        logging.error('processing "%s" failed, for unknown reason' % pdf)
         
 for txt in txt_list:
     try:
         emails.extend(extract_email_from_txt(txt))
     except:
-        pass
+        logging.error('processing "%s" failed, for unknown reason' % pdf)
     try:
         phones.extend(extract_cellphone_from_txt(txt))
     except:
-        pass
+        logging.error('processing "%s" failed, for unknown reason' % pdf)
     
 
 email_csv = ','.join(set(emails))
