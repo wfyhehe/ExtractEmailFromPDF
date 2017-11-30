@@ -69,7 +69,3 @@ def extract_cellphone_from_pdf(pdf):
     phone_regex = u'\D([1][3,4,5,7,8][0-9]{9})\D'
     return re.findall(phone_regex, block_text)
 
-
-if __name__ == '__main__':
-    print extract_email_from_pdf('email.pdf')
-    print extract_cellphone_from_pdf('phone.pdf')
