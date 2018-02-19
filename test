@@ -1,104 +1,85 @@
-@list_route(methods=['POST'], permission_classes=[IsAuthenticated, CannotSubmitAfterContestEnded])
-def submit(self, request):
-    if 'language' not in request.data or 'code' not in request.data:
-        return Response({'message': 'Language and code are necessary when submitted.'},
-                        status=status.HTTP_400_BAD_REQUEST)
+@csrf_exempt
+@cannot_submit_after_contest_ended
+def submit(request, problem):
+    if not request.user.is_authenticated():
+        return JsonResponse({
+            'success': False,
+            'message': 'login required',
+            'redirect_uri': '/accounts/signin/?next=/problem/'
+        })
 
-    problem = Problem.cached_objects.get(id=request.data.get('problem_id'))
-    key = 'user' if problem.unique_name != 'fizz-buzz' else 'header:X-REAL-IP'
+    if 'language' not in request.POST or 'code' not in request.POST:
+        return JsonResponse({
+            'success': False,
+            'message': 'Language and code are necessary when submitted.'
+        })
+
     user = request.user
-    if not user.is_superuser:
-        if is_ratelimited(request, increment=True, rate='20/m', group='submit', key=key) or \
-                is_ratelimited(request, increment=False, rate='200/h', group='submit', key=key) or \
-                is_ratelimited(request, increment=False, rate='2000/d', group='submit', key=key):
-            return Response({
-                'message': _('You submitted too fast, please wait a minute :)'),
-            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+    if _is_submit_out_of_limit(request, 'user'):
+        return JsonResponse({
+            'success': False,
+            'message': _('You submitted too fast, please wait a minute :)')
+        })
 
-    session = user.profile.session
-    params = {
+    submission_params = {
         'user': user,
-        'language': request.data['language'],
+        'language': request.POST['language'],
         'problem_id': problem.id,
-        'code': request.data['code'],
-        'code_length': len(request.data['code']),
-        'session': session
+        'code': request.POST['code'],
+        'code_length': len(request.POST['code']),
+        'session': user.profile.session
     }
 
-    if 'is_test_submission' in request.data:
-        params['input'] = request.data.get('input', '')
-        del params['session']
-        del params['code_length']
-        submission = TestSubmission.objects.create(**params)
+    is_test_submission = 'is_test_submission' in request.POST
+    if is_test_submission:
+        submission_params['input'] = request.POST.get('input', '')
+        del submission_params['session']
+        del submission_params['code_length']
+        submission = TestSubmission.objects.create(**submission_params)
     else:
-        submission = Submission.objects.create(**params)
+        submission = Submission.objects.create(**submission_params)
         submission_created_signal.send(sender=None, submission=submission)
         if submission.user and not settings.DEBUG:
             SubmissionService.upload_submission_to_s3(submission, async=False)
 
-    if submission.language == CodeLanguage.JAVA:
-        judger = judge_java_v2 if 'is_test_submission' not in request.data else judge_java_test_v2
-    elif submission.language == CodeLanguage.C:
-        judger = judge_c_v2 if 'is_test_submission' not in request.data else judge_c_test_v2
-    elif submission.language == CodeLanguage.CPP:
-        judger = judge_cpp_v2 if 'is_test_submission' not in request.data else judge_cpp_test_v2
-    elif submission.language == CodeLanguage.PYTHON:
-        judger = judge_python_v2 if 'is_test_submission' not in request.data else judge_python_test_v2
-    elif submission.language == CodeLanguage.PYTHON3:
-        judger = judge_python3 if 'is_test_submission' not in request.data else judge_python3_test
-    elif submission.language == CodeLanguage.JAVASCRIPT:
-        judger = judge_javascript_v2 if 'is_test_submission' not in request.data else judge_javascript_test_v2
-    elif submission.language == CodeLanguage.GO:
-        judger = judge_go if 'is_test_submission' not in request.data else judge_go_test
-    else:
-        judger = judge_java_v2 if 'is_test_submission' not in request.data else judge_java_test_v2
+    judger = _get_judger(submission.language, is_test_submission)
 
+    # TODO: deprecate cloudjudge gatekeeper
     codetemplate = problem.get_codetemplate(language=submission.language)
     if codetemplate is None:
-        return Response({'id': submission.id}, status=status.HTTP_404_NOT_FOUND)
+        return JsonResponse({'id': submission.id, 'success': False})
 
-    params = {
+    judge_params = {
         'submission_id': submission.id,
         'user_id': submission.user_id,
         'problem_id': submission.problem_id,
         'language': submission.language,
         'main_code': codetemplate.main,
         'solution_code': submission.code,
-        'time_limit': problem.time_limit,
-        'memory_limit': problem.memory_limit,
+        'time_limit': codetemplate.get_time_limit(submission.language) or problem.time_limit,
+        'memory_limit': codetemplate.get_memory_limit(submission.language) or problem.memory_limit,
         'classname': codetemplate.classname,
         'common_code': codetemplate.common_code,
         'common_classname': codetemplate.common_classname,
         'secret_key': get_secret_key(submission.id),
-        'created_at': utc_to_int(submission.created_at)
+        'created_at': utc_to_int(submission.created_at),
     }
 
-    # Get time_limit from s3 instead of database
-    if problem.version != Version.V1:
-        params['time_limit'] = codetemplate.get_time_limit(submission.language)
-        params['memory_limit'] = codetemplate.get_memory_limit(submission.language)
-
-        if params['time_limit'] is None:
-            params['time_limit'] = problem.time_limit
-
-        if params['memory_limit'] is None:
-            params['memory_limit'] = problem.memory_limit
-
-    if 'is_test_submission' in request.data:
-        params['input'] = submission.input
-        params['standard'] = codetemplate.standard
-        params['is_test_submission'] = True
+    if is_test_submission:
+        judge_params['input'] = submission.input
+        judge_params['standard'] = codetemplate.standard
+        judge_params['is_test_submission'] = True
 
     if settings.DEV:
-        mock_judge(params)
-        return Response({'id': submission.id})
+        mock_judge(judge_params)
+        return JsonResponse({'id': submission.id, 'success': True})
 
-    judger.delay(params)
+    judger.delay(judge_params)
 
     measure_manager.count('submission.submit',
                           tags={
                               'language': submission.language,
-                              'is_test_submission': 'is_test_submission' in request.data,
+                              'is_test_submission': is_test_submission,
                               'problem_id': submission.problem_id,
                           },
                           fields={
@@ -106,4 +87,4 @@ def submit(self, request):
                               'user_id': submission.user_id,
                           })
 
-    return Response({'id': submission.id})
+    return JsonResponse({'id': submission.id, 'success': True})
