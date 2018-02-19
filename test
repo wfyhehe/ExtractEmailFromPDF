@@ -1,38 +1,30 @@
-@csrf_exempt
-@cannot_submit_after_contest_ended
-def submit(request, problem):
-    if not request.user.is_authenticated():
-        return JsonResponse({
-            'success': False,
-            'message': 'login required',
-            'redirect_uri': '/accounts/signin/?next=/problem/'
-        })
-
-    if 'language' not in request.POST or 'code' not in request.POST:
-        return JsonResponse({
-            'success': False,
+@list_route(methods=['POST'], permission_classes=[IsAuthenticated, CannotSubmitAfterContestEnded])
+def submit(self, request):
+    if 'language' not in request.data or 'code' not in request.data:
+        return Response({
             'message': 'Language and code are necessary when submitted.'
-        })
+        }, status=status.HTTP_400_BAD_REQUEST
+        )
 
+    problem = Problem.cached_objects.get(id=request.data.get('problem_id'))
     user = request.user
     if _is_submit_out_of_limit(request, 'user'):
-        return JsonResponse({
-            'success': False,
-            'message': _('You submitted too fast, please wait a minute :)')
-        })
+        return Response({
+            'message': _('You submitted too fast, please wait a minute :)'),
+        }, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
     submission_params = {
         'user': user,
-        'language': request.POST['language'],
+        'language': request.data['language'],
         'problem_id': problem.id,
-        'code': request.POST['code'],
-        'code_length': len(request.POST['code']),
+        'code': request.data['code'],
+        'code_length': len(request.data['code']),
         'session': user.profile.session
     }
 
-    is_test_submission = 'is_test_submission' in request.POST
+    is_test_submission = 'is_test_submission' in request.data
     if is_test_submission:
-        submission_params['input'] = request.POST.get('input', '')
+        submission_params['input'] = request.data.get('input', '')
         del submission_params['session']
         del submission_params['code_length']
         submission = TestSubmission.objects.create(**submission_params)
@@ -44,10 +36,9 @@ def submit(request, problem):
 
     judger = _get_judger(submission.language, is_test_submission)
 
-    # TODO: deprecate cloudjudge gatekeeper
     codetemplate = problem.get_codetemplate(language=submission.language)
     if codetemplate is None:
-        return JsonResponse({'id': submission.id, 'success': False})
+        return Response({'id': submission.id}, status=status.HTTP_404_NOT_FOUND)
 
     judge_params = {
         'submission_id': submission.id,
@@ -56,8 +47,8 @@ def submit(request, problem):
         'language': submission.language,
         'main_code': codetemplate.main,
         'solution_code': submission.code,
-        'time_limit': codetemplate.get_time_limit(submission.language) or problem.time_limit,
-        'memory_limit': codetemplate.get_memory_limit(submission.language) or problem.memory_limit,
+        'time_limit': problem.time_limit,
+        'memory_limit': problem.memory_limit,
         'classname': codetemplate.classname,
         'common_code': codetemplate.common_code,
         'common_classname': codetemplate.common_classname,
@@ -72,7 +63,7 @@ def submit(request, problem):
 
     if settings.DEV:
         mock_judge(judge_params)
-        return JsonResponse({'id': submission.id, 'success': True})
+        return Response({'id': submission.id})
 
     judger.delay(judge_params)
 
@@ -87,4 +78,4 @@ def submit(request, problem):
                               'user_id': submission.user_id,
                           })
 
-    return JsonResponse({'id': submission.id, 'success': True})
+    return Response({'id': submission.id})
