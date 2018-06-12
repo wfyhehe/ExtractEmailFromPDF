@@ -18,6 +18,11 @@ phones = []
 success_count = 0
 fail_count = 0
 
+try:
+    os.mkdir('logs')
+except:
+    pass
+
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
                     datefmt='%a, %d %b %Y %H:%M:%S',
@@ -30,11 +35,6 @@ formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
 console.setFormatter(formatter)
 logging.getLogger('').addHandler(console)
 
-try:
-    os.mkdir('logs')
-except:
-    pass
-
 
 def process_directory(args, dir_name, file_names):
     for file_name in file_names:
@@ -45,7 +45,8 @@ def process_directory(args, dir_name, file_names):
         elif file_name.endswith(u'.txt'):
             txt_list.append(u'{dir}/{file}'.format(dir=dir_name, file=file_name))
         elif file_name.endswith(u'.doc'):
-            logging.error('can\'t process "%s", please convert to .docx or .pdf or .txt' % file_name)
+            logging.error(
+                'can\'t process "%s", please convert to .docx or .pdf or .txt' % file_name)
 
 
 os.path.walk(u'.', process_directory, None)
